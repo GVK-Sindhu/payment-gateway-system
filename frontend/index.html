@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Merchant Login</title>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+
+<body>
+
+<div class="auth-container">
+  <div class="auth-card">
+    <h2>Merchant Login</h2>
+
+    <form data-test-id="login-form" onsubmit="login(event)">
+      <label>Email</label>
+      <input
+        data-test-id="email-input"
+        type="email"
+        placeholder="test@example.com"
+        required
+      />
+
+      <label>Password</label>
+      <input
+        data-test-id="password-input"
+        type="password"
+        placeholder="Any password"
+        required
+      />
+
+      <button data-test-id="login-button">Login</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  function login(e) {
+    e.preventDefault();
+    window.location.href = "dashboard.html";
+  }
+</script>
+
+</body>
+</html>

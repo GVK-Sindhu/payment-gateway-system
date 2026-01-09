@@ -1,0 +1,26 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+}
+
+.table-container {
+  max-width: 1000px;
+  margin: auto;
+  padding: 30px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+th {
+  background: #2563eb;
+  color: white;
+}

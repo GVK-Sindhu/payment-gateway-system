@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+
+<body>
+
+<div class="dashboard-container" data-test-id="dashboard">
+
+  <h2>Merchant Dashboard</h2>
+
+  <!-- API Credentials -->
+  <div class="card" data-test-id="api-credentials">
+    <div>
+      <label>API Key</label>
+      <span data-test-id="api-key">key_test_abc123</span>
+    </div>
+    <div>
+      <label>API Secret</label>
+      <span data-test-id="api-secret">secret_test_xyz789</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" data-test-id="stats-container">
+    <div class="stat-card">
+      <h3 data-test-id="total-transactions">0</h3>
+      <p>Total Transactions</p>
+    </div>
+    <div class="stat-card">
+      <h3 data-test-id="total-amount">₹0.00</h3>
+      <p>Total Amount</p>
+    </div>
+    <div class="stat-card">
+      <h3 data-test-id="success-rate">0%</h3>
+      <p>Success Rate</p>
+    </div>
+  </div>
+
+  <a class="link-btn" href="transactions.html">
+    View Transactions
+  </a>
+
+</div>
+
+<script>
+async function loadStats() {
+  const res = await fetch("http://localhost:8000/api/v1/stats", {
+    headers: {
+      "X-Api-Key": "key_test_abc123",
+      "X-Api-Secret": "secret_test_xyz789"
+    }
+  });
+  const data = await res.json();
+
+  document.querySelector('[data-test-id="total-transactions"]').innerText =
+    data.totalTransactions;
+
+  document.querySelector('[data-test-id="total-amount"]').innerText =
+    "₹" + (data.totalAmount / 100).toFixed(2);
+
+  document.querySelector('[data-test-id="success-rate"]').innerText =
+    data.successRate + "%";
+}
+window.onload = loadStats;
+</script>
+
+</body>
+</html>

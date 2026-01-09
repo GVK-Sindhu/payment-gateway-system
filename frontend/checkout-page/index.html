@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Checkout</title>
+  <meta charset="UTF-8">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <script>
+    let orderId = new URLSearchParams(window.location.search).get("order_id");
+
+    function showUPIForm() {
+      document.querySelector('[data-test-id="upi-form"]').style.display = "block";
+      document.querySelector('[data-test-id="card-form"]').style.display = "none";
+    }
+
+    function showCardForm() {
+      document.querySelector('[data-test-id="card-form"]').style.display = "block";
+      document.querySelector('[data-test-id="upi-form"]').style.display = "none";
+    }
+
+    async function pay(method, data) {
+      document.querySelector('[data-test-id="processing-state"]').style.display = "block";
+
+      const res = await fetch("http://localhost:8000/api/v1/payments/public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: orderId, method, ...data })
+      });
+
+      const result = await res.json();
+
+      setTimeout(() => {
+        document.querySelector('[data-test-id="processing-state"]').style.display = "none";
+
+        if (result.status === "success") {
+          document.querySelector('[data-test-id="success-state"]').style.display = "block";
+          document.querySelector('[data-test-id="payment-id"]').innerText = result.id;
+        } else {
+          document.querySelector('[data-test-id="error-state"]').style.display = "block";
+        }
+      }, 1000);
+    }
+  </script>
+</head>
+
+<body>
+
+<div data-test-id="checkout-container" class="container">
+
+  <!-- Order Summary -->
+  <div data-test-id="order-summary" class="card">
+    <h2>Complete Payment</h2>
+
+    <p>
+      <strong>Amount:</strong>
+      <span data-test-id="order-amount">₹500.00</span>
+    </p>
+
+    <p>
+      <strong>Order ID:</strong>
+      <span data-test-id="order-id"></span>
+    </p>
+  </div>
+
+  <!-- Payment Methods -->
+  <div data-test-id="payment-methods" class="card">
+    <h3>Select Payment Method</h3>
+    <button data-test-id="method-upi" type="button" onclick="showUPIForm()">UPI</button>
+    <button data-test-id="method-card" type="button" onclick="showCardForm()">Card</button>
+  </div>
+
+  <!-- UPI Form -->
+  <form
+    data-test-id="upi-form"
+    class="card"
+    style="display:none"
+    onsubmit="event.preventDefault(); pay('upi', { vpa: document.querySelector('[data-test-id=vpa-input]').value })"
+  >
+    <h3>UPI Payment</h3>
+
+    <label>UPI ID</label>
+    <input
+      data-test-id="vpa-input"
+      placeholder="username@bank"
+      type="text"
+      required
+      pattern="^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$"
+    />
+
+    <button data-test-id="pay-button" type="submit">
+      Pay ₹500
+    </button>
+  </form>
+
+  <!-- Card Form -->
+  <form
+    data-test-id="card-form"
+    class="card"
+    style="display:none"
+    onsubmit="event.preventDefault(); pay('card', {
+      card: {
+        number: document.querySelector('[data-test-id=card-number-input]').value,
+        expiry_month: document.querySelector('[data-test-id=expiry-input]').value.split('/')[0],
+        expiry_year: document.querySelector('[data-test-id=expiry-input]').value.split('/')[1],
+        cvv: document.querySelector('[data-test-id=cvv-input]').value,
+        holder_name: document.querySelector('[data-test-id=cardholder-name-input]').value
+      }
+    })"
+  >
+    <h3>Card Payment</h3>
+
+    <label>Card Number</label>
+    <input
+      data-test-id="card-number-input"
+      placeholder="4111 1111 1111 1111"
+      required
+      minlength="13"
+      maxlength="19"
+    />
+
+    <label>Expiry (MM/YY)</label>
+    <input
+      data-test-id="expiry-input"
+      placeholder="MM/YY"
+      required
+      pattern="^(0[1-9]|1[0-2])\/\d{2}$"
+    />
+
+    <label>CVV</label>
+    <input
+      data-test-id="cvv-input"
+      placeholder="123"
+      required
+      minlength="3"
+      maxlength="4"
+    />
+
+    <label>Cardholder Name</label>
+    <input
+      data-test-id="cardholder-name-input"
+      placeholder="John Doe"
+      required
+    />
+
+    <button data-test-id="pay-button" type="submit">
+      Pay ₹500
+    </button>
+  </form>
+
+  <!-- Processing -->
+  <div data-test-id="processing-state" style="display:none" class="card">
+    <p data-test-id="processing-message">Processing payment...</p>
+  </div>
+
+  <!-- Success -->
+  <div data-test-id="success-state" style="display:none" class="card success">
+    <h2>Payment Successful!</h2>
+    <p>
+      Payment ID:
+      <span data-test-id="payment-id"></span>
+    </p>
+    <p data-test-id="success-message">
+      Your payment has been processed successfully
+    </p>
+  </div>
+
+  <!-- Error -->
+  <div data-test-id="error-state" style="display:none" class="card error">
+    <h2>Payment Failed</h2>
+    <p data-test-id="error-message">
+      Payment could not be processed
+    </p>
+    <button data-test-id="retry-button" type="button" onclick="location.reload()">
+      Try Again
+    </button>
+  </div>
+
+</div>
+
+<script>
+  document.querySelector('[data-test-id="order-id"]').innerText = orderId;
+</script>
+
+</body>
+</html>
