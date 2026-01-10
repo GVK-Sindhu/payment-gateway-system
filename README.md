@@ -81,3 +81,12 @@ payment-gateway/
 │ └── styles.css
 
 The dashboard and checkout interfaces are implemented using static HTML, CSS, and Vanilla JavaScript to ensure simplicity, fast loading, and compatibility with automated evaluation tools relying on `data-test-id` attributes.
+
+Note:
+The dashboard and checkout are implemented as static HTML pages.
+Nginx serves index.html by default for both frontend services.
+Access URLs:
+
+Dashboard: http://localhost:3000/
+Checkout: http://localhost:3001/?order_id={order_id}
+
