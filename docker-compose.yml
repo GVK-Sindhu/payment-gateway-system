@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -10,10 +8,23 @@ services:
       POSTGRES_PASSWORD: gateway_pass
     ports:
       - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gateway_user -d payment_gateway"]
       interval: 10s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_gateway
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
       retries: 5
 
   api:
@@ -24,15 +35,43 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://gateway_user:gateway_pass@postgres:5432/payment_gateway
+      REDIS_URL: redis://redis:6379
       PORT: 8000
 
+      # Test mode
       TEST_MODE: "true"
       TEST_PAYMENT_SUCCESS: "true"
       TEST_PROCESSING_DELAY: "1000"
+      WEBHOOK_RETRY_INTERVALS_TEST: "true"
 
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: gateway_worker
+    environment:
+      DATABASE_URL: postgresql://gateway_user:gateway_pass@postgres:5432/payment_gateway
+      REDIS_URL: redis://redis:6379
+
+      # Same test flags for deterministic behavior
+      TEST_MODE: "true"
+      TEST_PAYMENT_SUCCESS: "true"
+      TEST_PROCESSING_DELAY: "1000"
+      WEBHOOK_RETRY_INTERVALS_TEST: "true"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
 
   dashboard:
     build:

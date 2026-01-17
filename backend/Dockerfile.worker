@@ -1,0 +1,32 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+CMD ["node", "src/workers/index.js"]
+
+
+
+
+
+# backend/Dockerfile.worker
+
+# FROM node:18-alpine
+
+# WORKDIR /app`
+
+# Copy package files
+# COPY package*.json ./
+
+# Install dependencies
+# RUN npm install
+
+# Copy source code
+# COPY . .
+
+# Run the worker process
+# CMD ["node", "src/workers/index.js"]

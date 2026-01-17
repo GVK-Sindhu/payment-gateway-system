@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Checkout</title>
+</head>
+<body style="padding:20px;font-family:sans-serif;">
+  <h2>Checkout</h2>
+
+  <button
+    data-test-id="pay-success-button"
+    onclick="sendSuccess()"
+  >
+    Simulate Success
+  </button>
+
+  <button
+    data-test-id="pay-fail-button"
+    onclick="sendFailure()"
+    style="margin-left:10px;"
+  >
+    Simulate Failure
+  </button>
+
+  <script>
+    function sendSuccess() {
+      window.parent.postMessage({
+        type: 'payment_success',
+        data: { paymentId: 'pay_test_123' }
+      }, '*');
+    }
+
+    function sendFailure() {
+      window.parent.postMessage({
+        type: 'payment_failed',
+        data: { error: 'Payment failed' }
+      }, '*');
+    }
+  </script>
+</body>
+</html>

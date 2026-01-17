@@ -1,0 +1,27 @@
+version: "1.0"
+
+setup:
+  description: Initial setup for the payment gateway application
+  commands:
+    - docker-compose pull
+
+start:
+  description: Start all services including API, worker, Redis, Postgres, dashboard, and checkout
+  commands:
+    - docker-compose up -d
+
+verify:
+  description: Verify application health and async job infrastructure
+  commands:
+    - curl http://localhost:8000/health
+    - curl http://localhost:8000/api/v1/jobs/status
+
+test:
+  description: Run application tests if available
+  commands:
+    - echo "No automated test suite configured"
+
+shutdown:
+  description: Gracefully stop and clean up all services
+  commands:
+    - docker-compose down

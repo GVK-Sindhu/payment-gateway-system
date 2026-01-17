@@ -6,104 +6,125 @@ import { isValidCardNumber } from '../utils/luhn.js';
 import { detectCardNetwork } from '../utils/cardNetwork.js';
 import { isValidExpiry } from '../utils/expiry.js';
 
-const delay = (ms) => new Promise(res => setTimeout(res, ms));
+import paymentQueue from '../queues/payment.queue.js';
+import {
+  getCachedResponse,
+  saveResponse
+} from '../services/idempotency.service.js';
 
+/* ===========================
+   CREATE PAYMENT
+=========================== */
 export const createPayment = async (req, res) => {
-  const { order_id, method, vpa, card } = req.body;
+  try {
+    const { order_id, method, vpa, card } = req.body;
+    const merchantId = req.merchant.id;
+    const idempotencyKey = req.header('Idempotency-Key');
 
-  const orderRes = await pool.query(
-    `SELECT * FROM orders WHERE id=$1 AND merchant_id=$2`,
-    [order_id, req.merchant.id]
-  );
-
-  if (orderRes.rowCount === 0) {
-    return errorResponse(res, 404, "NOT_FOUND_ERROR", "Order not found");
-  }
-
-  const order = orderRes.rows[0];
-
-  let paymentId;
-  while (true) {
-    paymentId = generateId("pay");
-    const exists = await pool.query(`SELECT 1 FROM payments WHERE id=$1`, [paymentId]);
-    if (exists.rowCount === 0) break;
-  }
-
-  let cardNetwork = null;
-  let cardLast4 = null;
-
-  if (method === "upi") {
-    if (!isValidVPA(vpa)) {
-      return errorResponse(res, 400, "INVALID_VPA", "VPA format invalid");
+    /* 1️⃣ Idempotency */
+    if (idempotencyKey) {
+      const cached = await getCachedResponse(merchantId, idempotencyKey);
+      if (cached) {
+        return res.status(201).json(cached);
+      }
     }
-  }
 
-  if (method === "card") {
-    if (!card || !isValidCardNumber(card.number)) {
-      return errorResponse(res, 400, "INVALID_CARD", "Card validation failed");
-    }
-    if (!isValidExpiry(card.expiry_month, card.expiry_year)) {
-      return errorResponse(res, 400, "EXPIRED_CARD", "Card expiry date invalid");
-    }
-    cardNetwork = detectCardNetwork(card.number);
-    cardLast4 = card.number.slice(-4);
-  }
-
-  const insert = await pool.query(
-    `INSERT INTO payments
-     (id, order_id, merchant_id, amount, currency, method, status, vpa, card_network, card_last4)
-     VALUES ($1,$2,$3,$4,$5,$6,'processing',$7,$8,$9)
-     RETURNING *`,
-    [
-      paymentId,
-      order.id,
-      req.merchant.id,
-      order.amount,
-      order.currency,
-      method,
-      vpa || null,
-      cardNetwork,
-      cardLast4
-    ]
-  );
-
-  const payment = insert.rows[0];
-
-  const testMode = process.env.TEST_MODE === "true";
-  const success =
-    testMode
-      ? process.env.TEST_PAYMENT_SUCCESS !== "false"
-      : Math.random() < (method === "upi" ? 0.9 : 0.95);
-
-  const waitTime = testMode
-    ? parseInt(process.env.TEST_PROCESSING_DELAY || "1000")
-    : Math.floor(Math.random() * 5000) + 5000;
-
-  await delay(waitTime);
-
-  if (success) {
-    await pool.query(`UPDATE payments SET status='success' WHERE id=$1`, [payment.id]);
-  } else {
-    await pool.query(
-      `UPDATE payments SET status='failed', error_code='PAYMENT_FAILED',
-       error_description='Payment processing failed' WHERE id=$1`,
-      [payment.id]
+    /* 2️⃣ Validate order */
+    const orderRes = await pool.query(
+      `SELECT * FROM orders WHERE id=$1 AND merchant_id=$2`,
+      [order_id, merchantId]
     );
-  }
 
-  return res.status(201).json({
-    id: payment.id,
-    order_id: payment.order_id,
-    amount: payment.amount,
-    currency: payment.currency,
-    method: payment.method,
-    status: success ? "success" : "failed",
-    ...(method === "upi" && { vpa }),
-    ...(method === "card" && { card_network: cardNetwork, card_last4: cardLast4 }),
-    created_at: payment.created_at
-  });
+    if (!orderRes.rows.length) {
+      return errorResponse(res, 404, 'NOT_FOUND_ERROR', 'Order not found');
+    }
+
+    const order = orderRes.rows[0];
+
+    /* 3️⃣ Generate unique payment ID */
+    let paymentId;
+    while (true) {
+      paymentId = generateId('pay');
+      const exists = await pool.query(
+        `SELECT 1 FROM payments WHERE id=$1`,
+        [paymentId]
+      );
+      if (!exists.rowCount) break;
+    }
+
+    /* 4️⃣ Validate method */
+    let cardNetwork = null;
+    let cardLast4 = null;
+
+    if (method === 'upi') {
+      if (!isValidVPA(vpa)) {
+        return errorResponse(res, 400, 'INVALID_VPA', 'Invalid VPA');
+      }
+    }
+
+    if (method === 'card') {
+      if (!card || !isValidCardNumber(card.number)) {
+        return errorResponse(res, 400, 'INVALID_CARD', 'Invalid card');
+      }
+      if (!isValidExpiry(card.expiry_month, card.expiry_year)) {
+        return errorResponse(res, 400, 'EXPIRED_CARD', 'Card expired');
+      }
+      cardNetwork = detectCardNetwork(card.number);
+      cardLast4 = card.number.slice(-4);
+    }
+
+    /* 5️⃣ Insert payment (PENDING) */
+    const insert = await pool.query(
+      `INSERT INTO payments
+       (id, order_id, merchant_id, amount, currency, method, status,
+        vpa, card_network, card_last4)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9)
+       RETURNING *`,
+      [
+        paymentId,
+        order.id,
+        merchantId,
+        order.amount,
+        order.currency,
+        method,
+        vpa || null,
+        cardNetwork,
+        cardLast4
+      ]
+    );
+
+    const payment = insert.rows[0];
+
+    /* 6️⃣ Enqueue async job */
+    await paymentQueue.add('process-payment', {
+      paymentId: payment.id
+    });
+
+    const response = {
+      id: payment.id,
+      order_id: payment.order_id,
+      amount: payment.amount,
+      currency: payment.currency,
+      method: payment.method,
+      status: payment.status,
+      created_at: payment.created_at
+    };
+
+    /* 7️⃣ Save idempotency */
+    if (idempotencyKey) {
+      await saveResponse(merchantId, idempotencyKey, response);
+    }
+
+    return res.status(201).json(response);
+  } catch (err) {
+    console.error(err);
+    return errorResponse(res, 500, 'SERVER_ERROR', 'Payment failed');
+  }
 };
 
+/* ===========================
+   GET PAYMENT
+=========================== */
 export const getPayment = async (req, res) => {
   const { payment_id } = req.params;
 
@@ -112,25 +133,41 @@ export const getPayment = async (req, res) => {
     [payment_id, req.merchant.id]
   );
 
-  if (result.rowCount === 0) {
-    return errorResponse(res, 404, "NOT_FOUND_ERROR", "Payment not found");
+  if (!result.rows.length) {
+    return errorResponse(res, 404, 'NOT_FOUND_ERROR', 'Payment not found');
   }
 
-  const p = result.rows[0];
+  res.json(result.rows[0]);
+};
 
-  return res.status(200).json({
-    id: p.id,
-    order_id: p.order_id,
-    amount: p.amount,
-    currency: p.currency,
-    method: p.method,
-    status: p.status,
-    ...(p.method === "upi" && { vpa: p.vpa }),
-    ...(p.method === "card" && {
-      card_network: p.card_network,
-      card_last4: p.card_last4
-    }),
-    created_at: p.created_at,
-    updated_at: p.updated_at
-  });
+/* ===========================
+   CAPTURE PAYMENT
+=========================== */
+export const capturePayment = async (req, res) => {
+  const { id } = req.params;
+  const merchantId = req.merchant.id;
+
+  const result = await pool.query(
+    `SELECT * FROM payments WHERE id=$1 AND merchant_id=$2`,
+    [id, merchantId]
+  );
+
+  if (!result.rows.length || result.rows[0].status !== 'success') {
+    return errorResponse(
+      res,
+      400,
+      'BAD_REQUEST_ERROR',
+      'Payment not in capturable state'
+    );
+  }
+
+  const updated = await pool.query(
+    `UPDATE payments
+     SET captured=true, updated_at=NOW()
+     WHERE id=$1
+     RETURNING *`,
+    [id]
+  );
+
+  res.json(updated.rows[0]);
 };

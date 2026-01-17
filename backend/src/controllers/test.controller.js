@@ -1,4 +1,6 @@
 import pool from '../config/db.js';
+import paymentQueue from '../queues/payment.queue.js';
+import refundQueue from '../queues/refund.queue.js';
 
 export const getTestMerchant = async (req, res) => {
   const result = await pool.query(
@@ -14,3 +16,18 @@ export const getTestMerchant = async (req, res) => {
     seeded: true
   });
 };
+
+
+
+export async function jobStatus(req, res) {
+  const paymentCounts = await paymentQueue.getJobCounts();
+  const refundCounts = await refundQueue.getJobCounts();
+
+  res.json({
+    pending: paymentCounts.waiting + refundCounts.waiting,
+    processing: paymentCounts.active + refundCounts.active,
+    completed: paymentCounts.completed + refundCounts.completed,
+    failed: paymentCounts.failed + refundCounts.failed,
+    worker_status: 'running'
+  });
+}

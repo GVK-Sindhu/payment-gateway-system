@@ -60,7 +60,7 @@ async function loadStats() {
     data.totalTransactions;
 
   document.querySelector('[data-test-id="total-amount"]').innerText =
-    "₹" + (data.totalAmount / 100).toFixed(2);
+    "₹" + (data.totalAmount).toFixed(2);
 
   document.querySelector('[data-test-id="success-rate"]').innerText =
     data.successRate + "%";
